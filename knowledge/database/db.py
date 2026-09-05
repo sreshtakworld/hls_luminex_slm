@@ -67,3 +67,20 @@ def insert_chunk(document_id, chunk_index, content):
 
     connection.commit()
     connection.close()
+
+def delete_document(document_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute(
+        "DELETE FROM chunks WHERE document_id = ?",
+        (document_id,)
+    )
+
+    cursor.execute(
+        "DELETE FROM documents WHERE id = ?",
+        (document_id,)
+    )
+
+    connection.commit()
+    connection.close()
