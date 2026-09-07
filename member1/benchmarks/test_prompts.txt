@@ -1,0 +1,31 @@
+TEST 1
+What is artificial intelligence?
+
+TEST 2
+Explain machine learning in simple words.
+
+TEST 3
+What is photosynthesis?
+
+TEST 4
+What is an operating system?
+
+TEST 5
+Explain deadlock in simple words.
+
+TEST 6
+Give me three ways to save phone battery.
+
+TEST 7
+What is RAM?
+
+TEST 8
+Write a simple Python program to add two numbers.
+
+TEST 9
+Summarize this sentence:
+Artificial intelligence allows computers to perform tasks
+that normally require human intelligence.
+
+TEST 10
+Give me a short motivational message for a student.
