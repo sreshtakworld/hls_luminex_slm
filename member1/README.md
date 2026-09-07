@@ -72,8 +72,7 @@ Place the downloaded model at:
 
 
 
-`android\_test/NIRAAITest/app/src/main/assets/gemma3-1b-it-int4.litertlm`
-
+android/app/src/main/assets/gemma3-1b-it-int4.litertlm
 
 
 \## Runtime
