@@ -1,4 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:battery_plus/battery_plus.dart';
+
 import 'router/intent_router.dart';
 import 'device/device_profile.dart';
 import 'processing/processing_strategy.dart';
@@ -38,7 +43,8 @@ class NiraHomePage extends StatefulWidget {
 }
 
 class _NiraHomePageState extends State<NiraHomePage> {
-  final TextEditingController _messageController = TextEditingController();
+  final TextEditingController _messageController =
+      TextEditingController();
 
   final List<ChatMessage> _messages = [
     ChatMessage(
@@ -47,88 +53,175 @@ class _NiraHomePageState extends State<NiraHomePage> {
     ),
   ];
 
+  // ---------------- NETWORK ----------------
+
   bool _isOffline = true;
 
+  StreamSubscription<List<ConnectivityResult>>?
+      _connectivitySubscription;
+
+  // ---------------- BATTERY ----------------
+
+  final Battery _battery = Battery();
+
+  int _batteryLevel = 100;
+
+  StreamSubscription<BatteryState>? _batterySubscription;
+
+  // ---------------- INITIALIZATION ----------------
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Listen for network changes.
+    _connectivitySubscription =
+        Connectivity().onConnectivityChanged.listen((results) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isOffline =
+            results.contains(ConnectivityResult.none);
+      });
+    });
+
+    // Check network when app starts.
+    _checkConnectivity();
+
+    // Get current battery level.
+    _loadBatteryLevel();
+
+    // Listen for battery state changes.
+    _batterySubscription =
+        _battery.onBatteryStateChanged.listen((state) {
+      _loadBatteryLevel();
+    });
+  }
+
+  // ---------------- CONNECTIVITY ----------------
+
+  Future<void> _checkConnectivity() async {
+    final results =
+        await Connectivity().checkConnectivity();
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _isOffline =
+          results.contains(ConnectivityResult.none);
+    });
+  }
+
+  // ---------------- BATTERY ----------------
+
+  Future<void> _loadBatteryLevel() async {
+    try {
+      final level = await _battery.batteryLevel;
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _batteryLevel = level;
+      });
+    } catch (_) {
+      // Keep previous value if unavailable.
+    }
+  }
+
+  // ---------------- SEND MESSAGE ----------------
+
   Future<void> _sendMessage() async {
-  final text = _messageController.text.trim();
+    final text = _messageController.text.trim();
 
-  if (text.isEmpty) {
-    return;
-  }
+    if (text.isEmpty) {
+      return;
+    }
 
-  final intent = IntentRouter.classify(text);
+    // Determine what type of request this is.
+    final intent = IntentRouter.classify(text);
 
-  final profile = await DeviceProfile.getProfile();
+    // Detect the device's resources.
+    final profile = await DeviceProfile.getProfile();
 
-  final method = ProcessingStrategy.selectMethod(
-    profile.level,
-    intent,
-  );
-
-  final methodText = ProcessingStrategy.methodText(method);
-
-  String response;
-
-  switch (intent) {
-    case IntentType.calculator:
-  final result = CalculatorService.calculate(text);
-
-  if (result == null) {
-    response =
-        'Calculator route selected.\n'
-        'Processing: $methodText\n'
-        'I could not calculate that expression.';
-  } else {
-    response =
-        'Calculator route selected.\n'
-        'Processing: $methodText\n'
-        'Result: ${CalculatorService.formatResult(result)}';
-  }
-  break;
-
-    case IntentType.document:
-  final ragResponse = RagService.answer(text);
-
-  response =
-      'Document route selected.\n'
-      'Processing: $methodText\n'
-      '$ragResponse';
-  break;
-
-    case IntentType.general:
-  final gemmaResponse = GemmaService.generateResponse(text);
-
-  response =
-      'General AI route selected.\n'
-      'Processing: $methodText\n'
-      '$gemmaResponse';
-  break;
-  }
-
-  setState(() {
-    _messages.add(
-      ChatMessage(
-        text: text,
-        isUser: true,
-      ),
+    // Select the appropriate processing method.
+    // This happens silently in the background.
+    ProcessingStrategy.selectMethod(
+      profile.level,
+      intent,
     );
 
-    _messages.add(
-      ChatMessage(
-        text: response,
-        isUser: false,
-      ),
-    );
-  });
+    String response;
 
-  _messageController.clear();
-}
+    switch (intent) {
+      // ---------------- CALCULATOR ----------------
+
+      case IntentType.calculator:
+        final result =
+            CalculatorService.calculate(text);
+
+        if (result == null) {
+          response =
+              'I could not calculate that expression.';
+        } else {
+          response =
+              CalculatorService.formatResult(result);
+        }
+
+        break;
+
+      // ---------------- DOCUMENT / RAG ----------------
+
+      case IntentType.document:
+        response = RagService.answer(text);
+        break;
+
+      // ---------------- GENERAL AI ----------------
+
+      case IntentType.general:
+        response =
+            GemmaService.generateResponse(text);
+        break;
+    }
+
+    setState(() {
+      // User message.
+      _messages.add(
+        ChatMessage(
+          text: text,
+          isUser: true,
+        ),
+      );
+
+      // NIRA response.
+      _messages.add(
+        ChatMessage(
+          text: response,
+          isUser: false,
+        ),
+      );
+    });
+
+    _messageController.clear();
+  }
+
+  // ---------------- DISPOSE ----------------
 
   @override
   void dispose() {
+    _connectivitySubscription?.cancel();
+    _batterySubscription?.cancel();
     _messageController.dispose();
+
     super.dispose();
   }
+
+  // ---------------- MAIN SCREEN ----------------
 
   @override
   Widget build(BuildContext context) {
@@ -138,35 +231,46 @@ class _NiraHomePageState extends State<NiraHomePage> {
         backgroundColor: Colors.white,
         surfaceTintColor: Colors.white,
         titleSpacing: 16,
+
         title: Row(
           children: [
             Container(
               width: 42,
               height: 42,
+
               decoration: BoxDecoration(
                 color: Colors.indigo,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius:
+                    BorderRadius.circular(12),
               ),
+
               child: const Icon(
                 Icons.smart_toy_rounded,
                 color: Colors.white,
                 size: 25,
               ),
             ),
+
             const SizedBox(width: 12),
+
             const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+
               children: [
                 Text(
                   'NIRA',
+
                   style: TextStyle(
                     fontSize: 21,
                     fontWeight: FontWeight.bold,
                     color: Colors.black87,
                   ),
                 ),
+
                 Text(
                   'Offline AI Assistant',
+
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey,
@@ -176,74 +280,121 @@ class _NiraHomePageState extends State<NiraHomePage> {
             ),
           ],
         ),
+
         actions: [
           IconButton(
             tooltip: 'Settings',
-            icon: const Icon(Icons.settings_outlined),
+
+            icon: const Icon(
+              Icons.settings_outlined,
+            ),
+
             onPressed: () {
               _showSettings();
             },
           ),
+
           const SizedBox(width: 6),
         ],
       ),
 
+      // ---------------- BODY ----------------
+
       body: SafeArea(
         child: Column(
           children: [
-            // Offline / device status
+
+            // ---------------- STATUS BAR ----------------
+
             Container(
-              margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              padding: const EdgeInsets.symmetric(
+              margin: const EdgeInsets.fromLTRB(
+                16,
+                12,
+                16,
+                8,
+              ),
+
+              padding:
+                  const EdgeInsets.symmetric(
                 horizontal: 14,
                 vertical: 10,
               ),
+
               decoration: BoxDecoration(
                 color: _isOffline
                     ? Colors.orange.shade50
                     : Colors.green.shade50,
-                borderRadius: BorderRadius.circular(12),
+
+                borderRadius:
+                    BorderRadius.circular(12),
+
                 border: Border.all(
                   color: _isOffline
                       ? Colors.orange.shade200
                       : Colors.green.shade200,
                 ),
               ),
+
               child: Row(
                 children: [
+
+                  // Network icon
                   Icon(
                     _isOffline
                         ? Icons.cloud_off_rounded
                         : Icons.cloud_done_rounded,
+
                     size: 20,
+
                     color: _isOffline
                         ? Colors.orange.shade800
                         : Colors.green.shade800,
                   ),
+
                   const SizedBox(width: 9),
+
+                  // Network status
                   Expanded(
                     child: Text(
                       _isOffline
                           ? 'Offline mode • Processing on device'
                           : 'Online mode',
+
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
+
                         color: _isOffline
                             ? Colors.orange.shade900
                             : Colors.green.shade900,
                       ),
                     ),
                   ),
-                  const Icon(
-                    Icons.battery_5_bar_rounded,
+
+                  // Battery icon
+                  Icon(
+                    _batteryLevel >= 90
+                        ? Icons.battery_full_rounded
+                        : _batteryLevel >= 60
+                            ? Icons.battery_5_bar_rounded
+                            : _batteryLevel >= 30
+                                ? Icons.battery_3_bar_rounded
+                                : Icons.battery_1_bar_rounded,
+
                     size: 21,
-                    color: Colors.grey,
+
+                    color: _batteryLevel <= 20
+                        ? Colors.red
+                        : Colors.grey,
                   ),
+
                   const SizedBox(width: 4),
-                  const Text(
-                    'Device ready',
-                    style: TextStyle(
+
+                  // Battery percentage
+                  Text(
+                    '$_batteryLevel%',
+
+                    style: const TextStyle(
                       fontSize: 12,
                       color: Colors.grey,
                     ),
@@ -252,14 +403,20 @@ class _NiraHomePageState extends State<NiraHomePage> {
               ),
             ),
 
-            // Welcome section
+            // ---------------- WELCOME ----------------
+
             Container(
               width: double.infinity,
-              margin: const EdgeInsets.symmetric(
+
+              margin:
+                  const EdgeInsets.symmetric(
                 horizontal: 16,
                 vertical: 8,
               ),
-              padding: const EdgeInsets.all(18),
+
+              padding:
+                  const EdgeInsets.all(18),
+
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
@@ -267,25 +424,35 @@ class _NiraHomePageState extends State<NiraHomePage> {
                     Colors.white,
                   ],
                 ),
-                borderRadius: BorderRadius.circular(18),
+
+                borderRadius:
+                    BorderRadius.circular(18),
+
                 border: Border.all(
                   color: Colors.indigo.shade100,
                 ),
               ),
+
               child: const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+
                 children: [
                   Text(
                     'Welcome to NIRA 👋',
+
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+
                   SizedBox(height: 6),
+
                   Text(
                     'Your privacy-first AI assistant that works '
                     'directly on your device.',
+
                     style: TextStyle(
                       fontSize: 13,
                       color: Colors.black54,
@@ -296,18 +463,26 @@ class _NiraHomePageState extends State<NiraHomePage> {
               ),
             ),
 
-            // Chat area
+            // ---------------- CHAT ----------------
+
             Expanded(
               child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(
+                padding:
+                    const EdgeInsets.fromLTRB(
                   16,
                   8,
                   16,
                   12,
                 ),
-                itemCount: _messages.length,
-                itemBuilder: (context, index) {
-                  final message = _messages[index];
+
+                itemCount:
+                    _messages.length,
+
+                itemBuilder:
+                    (context, index) {
+
+                  final message =
+                      _messages[index];
 
                   return _ChatBubble(
                     message: message,
@@ -316,64 +491,112 @@ class _NiraHomePageState extends State<NiraHomePage> {
               ),
             ),
 
-            // Input area
+            // ---------------- INPUT AREA ----------------
+
             Container(
-              padding: const EdgeInsets.fromLTRB(
+              padding:
+                  const EdgeInsets.fromLTRB(
                 12,
                 10,
                 12,
                 12,
               ),
+
               decoration: BoxDecoration(
                 color: Colors.white,
+
                 boxShadow: [
                   BoxShadow(
                     blurRadius: 12,
-                    offset: const Offset(0, -3),
-                    color: Colors.black.withValues(alpha: 0.06),
+
+                    offset:
+                        const Offset(0, -3),
+
+                    color: Colors.black
+                        .withValues(
+                      alpha: 0.06,
+                    ),
                   ),
                 ],
               ),
+
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
+                crossAxisAlignment:
+                    CrossAxisAlignment.end,
+
                 children: [
+
                   Expanded(
                     child: TextField(
-                      controller: _messageController,
+                      controller:
+                          _messageController,
+
                       minLines: 1,
                       maxLines: 4,
-                      textInputAction: TextInputAction.newline,
-                      decoration: InputDecoration(
-                        hintText: 'Ask NIRA something...',
-                        prefixIcon: const Icon(
-                          Icons.chat_bubble_outline_rounded,
+
+                      textInputAction:
+                          TextInputAction.newline,
+
+                      decoration:
+                          InputDecoration(
+                        hintText:
+                            'Ask NIRA something...',
+
+                        prefixIcon:
+                            const Icon(
+                          Icons
+                              .chat_bubble_outline_rounded,
                         ),
+
                         filled: true,
-                        fillColor: const Color(0xFFF2F3F7),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(18),
-                          borderSide: BorderSide.none,
+
+                        fillColor:
+                            const Color(
+                          0xFFF2F3F7,
                         ),
-                        contentPadding: const EdgeInsets.symmetric(
+
+                        border:
+                            OutlineInputBorder(
+                          borderRadius:
+                              BorderRadius
+                                  .circular(18),
+
+                          borderSide:
+                              BorderSide.none,
+                        ),
+
+                        contentPadding:
+                            const EdgeInsets
+                                .symmetric(
                           horizontal: 14,
                           vertical: 13,
                         ),
                       ),
                     ),
                   ),
+
                   const SizedBox(width: 8),
 
                   // Send button
                   Container(
                     width: 52,
                     height: 52,
-                    decoration: BoxDecoration(
+
+                    decoration:
+                        BoxDecoration(
                       color: Colors.indigo,
-                      borderRadius: BorderRadius.circular(17),
+
+                      borderRadius:
+                          BorderRadius
+                              .circular(17),
                     ),
+
                     child: IconButton(
                       tooltip: 'Send',
-                      onPressed: _sendMessage,
+
+                      onPressed:
+                          _sendMessage,
+
                       icon: const Icon(
                         Icons.send_rounded,
                         color: Colors.white,
@@ -389,15 +612,23 @@ class _NiraHomePageState extends State<NiraHomePage> {
     );
   }
 
+  // ---------------- SETTINGS NAVIGATION ----------------
+
   void _showSettings() {
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (context) => const NiraSettingsPage(),
-    ),
-  );
+    Navigator.push(
+      context,
+
+      MaterialPageRoute(
+        builder: (context) =>
+            const NiraSettingsPage(),
+      ),
+    );
+  }
 }
-}
+
+// ======================================================
+// CHAT MESSAGE
+// ======================================================
 
 class ChatMessage {
   final String text;
@@ -409,7 +640,13 @@ class ChatMessage {
   });
 }
 
-class _ChatBubble extends StatelessWidget {
+// ======================================================
+// CHAT BUBBLE
+// ======================================================
+
+class _ChatBubble
+    extends StatelessWidget {
+
   final ChatMessage message;
 
   const _ChatBubble({
@@ -420,48 +657,81 @@ class _ChatBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     return Align(
       alignment:
-          message.isUser ? Alignment.centerRight : Alignment.centerLeft,
+          message.isUser
+              ? Alignment.centerRight
+              : Alignment.centerLeft,
+
       child: Container(
-        constraints: const BoxConstraints(
+        constraints:
+            const BoxConstraints(
           maxWidth: 310,
         ),
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.symmetric(
+
+        margin:
+            const EdgeInsets.only(
+          bottom: 10,
+        ),
+
+        padding:
+            const EdgeInsets.symmetric(
           horizontal: 15,
           vertical: 11,
         ),
-        decoration: BoxDecoration(
+
+        decoration:
+            BoxDecoration(
           color: message.isUser
               ? Colors.indigo
               : Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(17),
-            topRight: const Radius.circular(17),
-            bottomLeft: Radius.circular(
+
+          borderRadius:
+              BorderRadius.only(
+            topLeft:
+                const Radius.circular(17),
+
+            topRight:
+                const Radius.circular(17),
+
+            bottomLeft:
+                Radius.circular(
               message.isUser ? 17 : 4,
             ),
-            bottomRight: Radius.circular(
+
+            bottomRight:
+                Radius.circular(
               message.isUser ? 4 : 17,
             ),
           ),
+
           border: message.isUser
               ? null
               : Border.all(
-                  color: Colors.grey.shade200,
+                  color:
+                      Colors.grey.shade200,
                 ),
+
           boxShadow: [
             BoxShadow(
               blurRadius: 5,
-              offset: const Offset(0, 2),
-              color: Colors.black.withValues(alpha: 0.04),
+
+              offset:
+                  const Offset(0, 2),
+
+              color: Colors.black
+                  .withValues(
+                alpha: 0.04,
+              ),
             ),
           ],
         ),
+
         child: Text(
           message.text,
+
           style: TextStyle(
             fontSize: 14,
             height: 1.4,
+
             color: message.isUser
                 ? Colors.white
                 : Colors.black87,
@@ -471,117 +741,206 @@ class _ChatBubble extends StatelessWidget {
     );
   }
 }
-class NiraSettingsPage extends StatelessWidget {
-  const NiraSettingsPage({super.key});
+
+// ======================================================
+// SETTINGS PAGE
+// ======================================================
+
+class NiraSettingsPage
+    extends StatelessWidget {
+
+  const NiraSettingsPage({
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<DeviceProfile>(
-      future: DeviceProfile.getProfile(),
-      builder: (context, snapshot) {
-        final profile = snapshot.data;
+      future:
+          DeviceProfile.getProfile(),
+
+      builder:
+          (context, snapshot) {
+
+        final profile =
+            snapshot.data;
 
         return Scaffold(
-          backgroundColor: const Color(0xFFF7F8FC),
+          backgroundColor:
+              const Color(0xFFF7F8FC),
 
           appBar: AppBar(
-            backgroundColor: Colors.white,
-            surfaceTintColor: Colors.white,
+            backgroundColor:
+                Colors.white,
+
+            surfaceTintColor:
+                Colors.white,
+
             elevation: 0,
+
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back_rounded),
+              icon: const Icon(
+                Icons.arrow_back_rounded,
+              ),
+
               onPressed: () {
                 Navigator.pop(context);
               },
             ),
+
             title: const Text(
               'NIRA Settings',
+
               style: TextStyle(
-                fontWeight: FontWeight.bold,
+                fontWeight:
+                    FontWeight.bold,
               ),
             ),
           ),
 
           body: ListView(
-            padding: const EdgeInsets.all(16),
+            padding:
+                const EdgeInsets.all(16),
+
             children: [
+
               const _SettingsSectionTitle(
-                title: 'Device Information',
-                icon: Icons.smartphone_rounded,
+                title:
+                    'Device Information',
+
+                icon:
+                    Icons.smartphone_rounded,
               ),
 
               const SizedBox(height: 10),
 
               _SettingsCard(
-                icon: Icons.phone_android_rounded,
-                title: 'Device',
-                value: profile?.deviceName ?? 'Detecting...',
+                icon:
+                    Icons.phone_android_rounded,
+
+                title:
+                    'Device',
+
+                value:
+                    profile?.deviceName ??
+                        'Detecting...',
               ),
 
               _SettingsCard(
-                icon: Icons.android_rounded,
-                title: 'Platform',
-                value: profile?.platform ?? 'Detecting...',
+                icon:
+                    Icons.android_rounded,
+
+                title:
+                    'Platform',
+
+                value:
+                    profile?.platform ??
+                        'Detecting...',
               ),
 
               _SettingsCard(
-                icon: Icons.memory_rounded,
-                title: 'Architecture',
-                value: profile?.architecture ?? 'Detecting...',
+                icon:
+                    Icons.memory_rounded,
+
+                title:
+                    'Architecture',
+
+                value:
+                    profile?.architecture ??
+                        'Detecting...',
               ),
 
               _SettingsCard(
-                icon: Icons.speed_rounded,
-                title: 'Device Level',
-                value: profile?.levelText ?? 'Detecting...',
+                icon:
+                    Icons.speed_rounded,
+
+                title:
+                    'Device Level',
+
+                value:
+                    profile?.levelText ??
+                        'Detecting...',
               ),
 
               const SizedBox(height: 24),
 
               const _SettingsSectionTitle(
-                title: 'AI & Processing',
-                icon: Icons.psychology_rounded,
+                title:
+                    'AI & Processing',
+
+                icon:
+                    Icons.psychology_rounded,
               ),
 
               const SizedBox(height: 10),
 
               _SettingsCard(
-                icon: Icons.smart_toy_rounded,
-                title: 'AI Assistant',
-                value: 'NIRA',
+                icon:
+                    Icons.smart_toy_rounded,
+
+                title:
+                    'AI Assistant',
+
+                value:
+                    'NIRA',
               ),
 
               _SettingsCard(
-                icon: Icons.memory_rounded,
-                title: 'Processing',
-                value: 'On-device processing',
+                icon:
+                    Icons.memory_rounded,
+
+                title:
+                    'Processing',
+
+                value:
+                    'On-device processing',
               ),
 
               _SettingsCard(
-                icon: Icons.cloud_off_rounded,
-                title: 'Network Mode',
-                value: 'Offline',
+                icon:
+                    Icons.cloud_off_rounded,
+
+                title:
+                    'Network Mode',
+
+                value:
+                    'Offline',
               ),
 
               const SizedBox(height: 24),
 
               const _SettingsSectionTitle(
-                title: 'System Status',
-                icon: Icons.monitor_heart_outlined,
+                title:
+                    'System Status',
+
+                icon:
+                    Icons
+                        .monitor_heart_outlined,
               ),
 
               const SizedBox(height: 10),
 
               _SettingsCard(
-                icon: Icons.check_circle_outline_rounded,
-                title: 'Application',
-                value: 'Running normally',
+                icon:
+                    Icons
+                        .check_circle_outline_rounded,
+
+                title:
+                    'Application',
+
+                value:
+                    'Running normally',
               ),
 
               _SettingsCard(
-                icon: Icons.security_rounded,
-                title: 'Privacy',
-                value: 'Data stays on device',
+                icon:
+                    Icons.security_rounded,
+
+                title:
+                    'Privacy',
+
+                value:
+                    'Data stays on device',
               ),
 
               const SizedBox(height: 30),
@@ -589,9 +948,11 @@ class NiraSettingsPage extends StatelessWidget {
               Center(
                 child: Text(
                   'NIRA • Offline AI Assistant',
+
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.grey.shade600,
+                    color:
+                        Colors.grey.shade600,
                   ),
                 ),
               ),
@@ -603,7 +964,13 @@ class NiraSettingsPage extends StatelessWidget {
   }
 }
 
-class _SettingsSectionTitle extends StatelessWidget {
+// ======================================================
+// SETTINGS SECTION TITLE
+// ======================================================
+
+class _SettingsSectionTitle
+    extends StatelessWidget {
+
   final String title;
   final IconData icon;
 
@@ -616,17 +983,22 @@ class _SettingsSectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
+
         Icon(
           icon,
           size: 21,
           color: Colors.indigo,
         ),
+
         const SizedBox(width: 9),
+
         Text(
           title,
+
           style: const TextStyle(
             fontSize: 18,
-            fontWeight: FontWeight.bold,
+            fontWeight:
+                FontWeight.bold,
           ),
         ),
       ],
@@ -634,7 +1006,13 @@ class _SettingsSectionTitle extends StatelessWidget {
   }
 }
 
-class _SettingsCard extends StatelessWidget {
+// ======================================================
+// SETTINGS CARD
+// ======================================================
+
+class _SettingsCard
+    extends StatelessWidget {
+
   final IconData icon;
   final String title;
   final String value;
@@ -648,24 +1026,45 @@ class _SettingsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
+      margin:
+          const EdgeInsets.only(
+        bottom: 10,
+      ),
+
+      padding:
+          const EdgeInsets.all(15),
+
+      decoration:
+          BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
+
+        borderRadius:
+            BorderRadius.circular(15),
+
         border: Border.all(
-          color: Colors.grey.shade200,
+          color:
+              Colors.grey.shade200,
         ),
       ),
+
       child: Row(
         children: [
+
           Container(
             width: 42,
             height: 42,
-            decoration: BoxDecoration(
-              color: Colors.indigo.shade50,
-              borderRadius: BorderRadius.circular(12),
+
+            decoration:
+                BoxDecoration(
+              color:
+                  Colors.indigo.shade50,
+
+              borderRadius:
+                  BorderRadius.circular(
+                12,
+              ),
             ),
+
             child: Icon(
               icon,
               color: Colors.indigo,
@@ -676,21 +1075,32 @@ class _SettingsCard extends StatelessWidget {
 
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+
               children: [
+
                 Text(
                   title,
-                  style: const TextStyle(
+
+                  style:
+                      const TextStyle(
                     fontSize: 14,
-                    fontWeight: FontWeight.w600,
+                    fontWeight:
+                        FontWeight.w600,
                   ),
                 ),
+
                 const SizedBox(height: 3),
+
                 Text(
                   value,
-                  style: const TextStyle(
+
+                  style:
+                      const TextStyle(
                     fontSize: 13,
-                    color: Colors.grey,
+                    color:
+                        Colors.grey,
                   ),
                 ),
               ],

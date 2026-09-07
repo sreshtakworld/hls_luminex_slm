@@ -1,4 +1,5 @@
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/services.dart';
 
 enum DeviceLevel {
   low,
@@ -21,6 +22,8 @@ class DeviceProfile {
     required this.level,
   });
 
+  static const MethodChannel _channel = MethodChannel('nira/device');
+
   static Future<DeviceProfile> getProfile() async {
     final deviceInfo = DeviceInfoPlugin();
 
@@ -32,9 +35,9 @@ class DeviceProfile {
         ? androidInfo.supportedAbis.first
         : 'Unknown';
 
-    // Android does not directly provide total RAM through
-    // device_info_plus, so we use a safe demo value for now.
-    const ram = 8;
+    final ramValue = await _channel.invokeMethod<double>('getRamGb');
+
+    final ram = ramValue?.round() ?? 8;
 
     DeviceLevel level;
 
