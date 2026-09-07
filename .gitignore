@@ -30,3 +30,7 @@ captures/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Flutter generated files
+.dart_tool/
+.flutter-plugins-dependencies
