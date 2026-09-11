@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:battery_plus/battery_plus.dart';
+import 'package:file_picker/file_picker.dart';
 
 import 'router/intent_router.dart';
 import 'device/device_profile.dart';
@@ -134,6 +135,105 @@ class _NiraHomePageState extends State<NiraHomePage> {
     }
   }
 
+  // ---------------- PDF UPLOAD ----------------
+
+  Future<void> _pickAndIngestPdfs() async {
+    try {
+      final files = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+
+      if (files.isEmpty) {
+        return;
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _messages.add(
+          ChatMessage(
+            text:
+                'Loading ${files.length} PDF${files.length == 1 ? '' : 's'}...',
+            isUser: false,
+          ),
+        );
+      });
+
+      var successCount = 0;
+      final failedFiles = <String>[];
+
+      for (final file in files) {
+        final path = file.path;
+
+        if (path == null || path.isEmpty) {
+          failedFiles.add(file.name);
+          continue;
+        }
+
+        final response = await RagService.ingestPdf(
+          pdfPath: path,
+          filename: file.name,
+        );
+
+        if (response.startsWith('PDF loaded successfully.')) {
+          successCount++;
+        } else {
+          failedFiles.add(file.name);
+        }
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      final message = StringBuffer();
+      message.write('PDF upload complete.\n');
+      message.write('Loaded: $successCount/${files.length}');
+
+      if (failedFiles.isNotEmpty) {
+        message.write('\nFailed: ${failedFiles.join(', ')}');
+      }
+
+      setState(() {
+        _messages.add(
+          ChatMessage(
+            text: message.toString(),
+            isUser: false,
+          ),
+        );
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _messages.add(
+          ChatMessage(
+            text: 'I could not upload the PDF. Please try again.',
+            isUser: false,
+          ),
+        );
+      });
+    }
+  }
+
+  // ---------------- DOCUMENTS NAVIGATION ----------------
+
+  void _openDocuments() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => NiraDocumentsPage(
+          onChoosePdf: _pickAndIngestPdfs,
+        ),
+      ),
+    );
+  }
+
   // ---------------- SEND MESSAGE ----------------
 
   Future<void> _sendMessage() async {
@@ -178,14 +278,14 @@ class _NiraHomePageState extends State<NiraHomePage> {
       // ---------------- DOCUMENT / RAG ----------------
 
       case IntentType.document:
-        response = RagService.answer(text);
+        response = await RagService.answer(text);
         break;
 
       // ---------------- GENERAL AI ----------------
 
       case IntentType.general:
         response =
-            GemmaService.generateResponse(text);
+            await GemmaService.generateResponse(text);
         break;
     }
 
@@ -237,13 +337,11 @@ class _NiraHomePageState extends State<NiraHomePage> {
             Container(
               width: 42,
               height: 42,
-
               decoration: BoxDecoration(
                 color: Colors.indigo,
                 borderRadius:
                     BorderRadius.circular(12),
               ),
-
               child: const Icon(
                 Icons.smart_toy_rounded,
                 color: Colors.white,
@@ -256,21 +354,17 @@ class _NiraHomePageState extends State<NiraHomePage> {
             const Column(
               crossAxisAlignment:
                   CrossAxisAlignment.start,
-
               children: [
                 Text(
                   'NIRA',
-
                   style: TextStyle(
                     fontSize: 21,
                     fontWeight: FontWeight.bold,
                     color: Colors.black87,
                   ),
                 ),
-
                 Text(
                   'Offline AI Assistant',
-
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey,
@@ -283,12 +377,18 @@ class _NiraHomePageState extends State<NiraHomePage> {
 
         actions: [
           IconButton(
-            tooltip: 'Settings',
+            tooltip: 'Documents',
+            icon: const Icon(
+              Icons.picture_as_pdf_outlined,
+            ),
+            onPressed: _openDocuments,
+          ),
 
+          IconButton(
+            tooltip: 'Settings',
             icon: const Icon(
               Icons.settings_outlined,
             ),
-
             onPressed: () {
               _showSettings();
             },
@@ -313,28 +413,23 @@ class _NiraHomePageState extends State<NiraHomePage> {
                 16,
                 8,
               ),
-
               padding:
                   const EdgeInsets.symmetric(
                 horizontal: 14,
                 vertical: 10,
               ),
-
               decoration: BoxDecoration(
                 color: _isOffline
                     ? Colors.orange.shade50
                     : Colors.green.shade50,
-
                 borderRadius:
                     BorderRadius.circular(12),
-
                 border: Border.all(
                   color: _isOffline
                       ? Colors.orange.shade200
                       : Colors.green.shade200,
                 ),
               ),
-
               child: Row(
                 children: [
 
@@ -343,9 +438,7 @@ class _NiraHomePageState extends State<NiraHomePage> {
                     _isOffline
                         ? Icons.cloud_off_rounded
                         : Icons.cloud_done_rounded,
-
                     size: 20,
-
                     color: _isOffline
                         ? Colors.orange.shade800
                         : Colors.green.shade800,
@@ -359,11 +452,9 @@ class _NiraHomePageState extends State<NiraHomePage> {
                       _isOffline
                           ? 'Offline mode • Processing on device'
                           : 'Online mode',
-
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-
                         color: _isOffline
                             ? Colors.orange.shade900
                             : Colors.green.shade900,
@@ -380,9 +471,7 @@ class _NiraHomePageState extends State<NiraHomePage> {
                             : _batteryLevel >= 30
                                 ? Icons.battery_3_bar_rounded
                                 : Icons.battery_1_bar_rounded,
-
                     size: 21,
-
                     color: _batteryLevel <= 20
                         ? Colors.red
                         : Colors.grey,
@@ -393,7 +482,6 @@ class _NiraHomePageState extends State<NiraHomePage> {
                   // Battery percentage
                   Text(
                     '$_batteryLevel%',
-
                     style: const TextStyle(
                       fontSize: 12,
                       color: Colors.grey,
@@ -407,16 +495,13 @@ class _NiraHomePageState extends State<NiraHomePage> {
 
             Container(
               width: double.infinity,
-
               margin:
                   const EdgeInsets.symmetric(
                 horizontal: 16,
                 vertical: 8,
               ),
-
               padding:
                   const EdgeInsets.all(18),
-
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
@@ -424,23 +509,18 @@ class _NiraHomePageState extends State<NiraHomePage> {
                     Colors.white,
                   ],
                 ),
-
                 borderRadius:
                     BorderRadius.circular(18),
-
                 border: Border.all(
                   color: Colors.indigo.shade100,
                 ),
               ),
-
               child: const Column(
                 crossAxisAlignment:
                     CrossAxisAlignment.start,
-
                 children: [
                   Text(
                     'Welcome to NIRA 👋',
-
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -452,7 +532,6 @@ class _NiraHomePageState extends State<NiraHomePage> {
                   Text(
                     'Your privacy-first AI assistant that works '
                     'directly on your device.',
-
                     style: TextStyle(
                       fontSize: 13,
                       color: Colors.black54,
@@ -474,13 +553,10 @@ class _NiraHomePageState extends State<NiraHomePage> {
                   16,
                   12,
                 ),
-
                 itemCount:
                     _messages.length,
-
                 itemBuilder:
                     (context, index) {
-
                   final message =
                       _messages[index];
 
@@ -501,17 +577,13 @@ class _NiraHomePageState extends State<NiraHomePage> {
                 12,
                 12,
               ),
-
               decoration: BoxDecoration(
                 color: Colors.white,
-
                 boxShadow: [
                   BoxShadow(
                     blurRadius: 12,
-
                     offset:
                         const Offset(0, -3),
-
                     color: Colors.black
                         .withValues(
                       alpha: 0.06,
@@ -519,52 +591,41 @@ class _NiraHomePageState extends State<NiraHomePage> {
                   ),
                 ],
               ),
-
               child: Row(
                 crossAxisAlignment:
                     CrossAxisAlignment.end,
-
                 children: [
 
                   Expanded(
                     child: TextField(
                       controller:
                           _messageController,
-
                       minLines: 1,
                       maxLines: 4,
-
                       textInputAction:
                           TextInputAction.newline,
-
                       decoration:
                           InputDecoration(
                         hintText:
                             'Ask NIRA something...',
-
                         prefixIcon:
                             const Icon(
                           Icons
                               .chat_bubble_outline_rounded,
                         ),
-
                         filled: true,
-
                         fillColor:
                             const Color(
                           0xFFF2F3F7,
                         ),
-
                         border:
                             OutlineInputBorder(
                           borderRadius:
                               BorderRadius
                                   .circular(18),
-
                           borderSide:
                               BorderSide.none,
                         ),
-
                         contentPadding:
                             const EdgeInsets
                                 .symmetric(
@@ -581,22 +642,17 @@ class _NiraHomePageState extends State<NiraHomePage> {
                   Container(
                     width: 52,
                     height: 52,
-
                     decoration:
                         BoxDecoration(
                       color: Colors.indigo,
-
                       borderRadius:
                           BorderRadius
                               .circular(17),
                     ),
-
                     child: IconButton(
                       tooltip: 'Send',
-
                       onPressed:
                           _sendMessage,
-
                       icon: const Icon(
                         Icons.send_rounded,
                         color: Colors.white,
@@ -617,7 +673,6 @@ class _NiraHomePageState extends State<NiraHomePage> {
   void _showSettings() {
     Navigator.push(
       context,
-
       MaterialPageRoute(
         builder: (context) =>
             const NiraSettingsPage(),
@@ -666,18 +721,15 @@ class _ChatBubble
             const BoxConstraints(
           maxWidth: 310,
         ),
-
         margin:
             const EdgeInsets.only(
           bottom: 10,
         ),
-
         padding:
             const EdgeInsets.symmetric(
           horizontal: 15,
           vertical: 11,
         ),
-
         decoration:
             BoxDecoration(
           color: message.isUser
@@ -713,10 +765,8 @@ class _ChatBubble
           boxShadow: [
             BoxShadow(
               blurRadius: 5,
-
               offset:
                   const Offset(0, 2),
-
               color: Colors.black
                   .withValues(
                 alpha: 0.04,
@@ -727,15 +777,195 @@ class _ChatBubble
 
         child: Text(
           message.text,
-
           style: TextStyle(
             fontSize: 14,
             height: 1.4,
-
             color: message.isUser
                 ? Colors.white
                 : Colors.black87,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ======================================================
+// DOCUMENTS PAGE
+// ======================================================
+
+class NiraDocumentsPage extends StatelessWidget {
+  final Future<void> Function() onChoosePdf;
+
+  const NiraDocumentsPage({
+    super.key,
+    required this.onChoosePdf,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF7F8FC),
+
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        elevation: 0,
+
+        leading: IconButton(
+          tooltip: 'Back to NIRA',
+          icon: const Icon(
+            Icons.arrow_back_rounded,
+          ),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+        ),
+
+        title: const Text(
+          'NIRA Documents',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+
+      body: Padding(
+        padding: const EdgeInsets.all(20),
+
+        child: Column(
+          crossAxisAlignment:
+              CrossAxisAlignment.stretch,
+
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+
+              decoration: BoxDecoration(
+                color: Colors.white,
+
+                borderRadius:
+                    BorderRadius.circular(18),
+
+                border: Border.all(
+                  color: Colors.grey.shade200,
+                ),
+              ),
+
+              child: Column(
+                children: [
+                  Container(
+                    width: 64,
+                    height: 64,
+
+                    decoration:
+                        BoxDecoration(
+                      color:
+                          Colors.indigo.shade50,
+
+                      borderRadius:
+                          BorderRadius.circular(18),
+                    ),
+
+                    child: const Icon(
+                      Icons.picture_as_pdf_rounded,
+                      size: 34,
+                      color: Colors.indigo,
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  const Text(
+                    'Add a PDF to NIRA',
+
+                    textAlign: TextAlign.center,
+
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  const Text(
+                    'Choose a PDF from your device. '
+                    'After selecting it, you will return '
+                    'to this page. Use the back arrow '
+                    'to return to the NIRA chat.',
+
+                    textAlign: TextAlign.center,
+
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.45,
+                      color: Colors.black54,
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  SizedBox(
+                    width: double.infinity,
+
+                    child: FilledButton.icon(
+                      onPressed: onChoosePdf,
+
+                      icon: const Icon(
+                        Icons.upload_file_rounded,
+                      ),
+
+                      label: const Text(
+                        'Choose PDF',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 18),
+
+            Container(
+              padding: const EdgeInsets.all(16),
+
+              decoration: BoxDecoration(
+                color: Colors.indigo.shade50,
+                borderRadius:
+                    BorderRadius.circular(14),
+              ),
+
+              child: const Row(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+
+                children: [
+                  Icon(
+                    Icons.info_outline_rounded,
+                    color: Colors.indigo,
+                  ),
+
+                  SizedBox(width: 10),
+
+                  Expanded(
+                    child: Text(
+                      'Once the PDF is loaded, go back '
+                      'to the NIRA chat and ask questions '
+                      'about the document. Document questions '
+                      'are handled through local retrieval '
+                      'and Gemma.',
+
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.45,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -758,7 +988,6 @@ class NiraSettingsPage
     return FutureBuilder<DeviceProfile>(
       future:
           DeviceProfile.getProfile(),
-
       builder:
           (context, snapshot) {
 
@@ -772,17 +1001,14 @@ class NiraSettingsPage
           appBar: AppBar(
             backgroundColor:
                 Colors.white,
-
             surfaceTintColor:
                 Colors.white,
-
             elevation: 0,
 
             leading: IconButton(
               icon: const Icon(
                 Icons.arrow_back_rounded,
               ),
-
               onPressed: () {
                 Navigator.pop(context);
               },
@@ -790,7 +1016,6 @@ class NiraSettingsPage
 
             title: const Text(
               'NIRA Settings',
-
               style: TextStyle(
                 fontWeight:
                     FontWeight.bold,
@@ -801,13 +1026,11 @@ class NiraSettingsPage
           body: ListView(
             padding:
                 const EdgeInsets.all(16),
-
             children: [
 
               const _SettingsSectionTitle(
                 title:
                     'Device Information',
-
                 icon:
                     Icons.smartphone_rounded,
               ),
@@ -817,10 +1040,8 @@ class NiraSettingsPage
               _SettingsCard(
                 icon:
                     Icons.phone_android_rounded,
-
                 title:
                     'Device',
-
                 value:
                     profile?.deviceName ??
                         'Detecting...',
@@ -829,10 +1050,8 @@ class NiraSettingsPage
               _SettingsCard(
                 icon:
                     Icons.android_rounded,
-
                 title:
                     'Platform',
-
                 value:
                     profile?.platform ??
                         'Detecting...',
@@ -841,10 +1060,8 @@ class NiraSettingsPage
               _SettingsCard(
                 icon:
                     Icons.memory_rounded,
-
                 title:
                     'Architecture',
-
                 value:
                     profile?.architecture ??
                         'Detecting...',
@@ -853,10 +1070,8 @@ class NiraSettingsPage
               _SettingsCard(
                 icon:
                     Icons.speed_rounded,
-
                 title:
                     'Device Level',
-
                 value:
                     profile?.levelText ??
                         'Detecting...',
@@ -867,7 +1082,6 @@ class NiraSettingsPage
               const _SettingsSectionTitle(
                 title:
                     'AI & Processing',
-
                 icon:
                     Icons.psychology_rounded,
               ),
@@ -877,10 +1091,8 @@ class NiraSettingsPage
               _SettingsCard(
                 icon:
                     Icons.smart_toy_rounded,
-
                 title:
                     'AI Assistant',
-
                 value:
                     'NIRA',
               ),
@@ -888,10 +1100,8 @@ class NiraSettingsPage
               _SettingsCard(
                 icon:
                     Icons.memory_rounded,
-
                 title:
                     'Processing',
-
                 value:
                     'On-device processing',
               ),
@@ -899,10 +1109,8 @@ class NiraSettingsPage
               _SettingsCard(
                 icon:
                     Icons.cloud_off_rounded,
-
                 title:
                     'Network Mode',
-
                 value:
                     'Offline',
               ),
@@ -912,7 +1120,6 @@ class NiraSettingsPage
               const _SettingsSectionTitle(
                 title:
                     'System Status',
-
                 icon:
                     Icons
                         .monitor_heart_outlined,
@@ -924,10 +1131,8 @@ class NiraSettingsPage
                 icon:
                     Icons
                         .check_circle_outline_rounded,
-
                 title:
                     'Application',
-
                 value:
                     'Running normally',
               ),
@@ -935,10 +1140,8 @@ class NiraSettingsPage
               _SettingsCard(
                 icon:
                     Icons.security_rounded,
-
                 title:
                     'Privacy',
-
                 value:
                     'Data stays on device',
               ),
@@ -948,7 +1151,6 @@ class NiraSettingsPage
               Center(
                 child: Text(
                   'NIRA • Offline AI Assistant',
-
                   style: TextStyle(
                     fontSize: 12,
                     color:
@@ -994,7 +1196,6 @@ class _SettingsSectionTitle
 
         Text(
           title,
-
           style: const TextStyle(
             fontSize: 18,
             fontWeight:
@@ -1030,41 +1231,33 @@ class _SettingsCard
           const EdgeInsets.only(
         bottom: 10,
       ),
-
       padding:
           const EdgeInsets.all(15),
-
       decoration:
           BoxDecoration(
         color: Colors.white,
-
         borderRadius:
             BorderRadius.circular(15),
-
         border: Border.all(
           color:
               Colors.grey.shade200,
         ),
       ),
-
       child: Row(
         children: [
 
           Container(
             width: 42,
             height: 42,
-
             decoration:
                 BoxDecoration(
               color:
                   Colors.indigo.shade50,
-
               borderRadius:
                   BorderRadius.circular(
                 12,
               ),
             ),
-
             child: Icon(
               icon,
               color: Colors.indigo,
@@ -1077,12 +1270,10 @@ class _SettingsCard
             child: Column(
               crossAxisAlignment:
                   CrossAxisAlignment.start,
-
               children: [
 
                 Text(
                   title,
-
                   style:
                       const TextStyle(
                     fontSize: 14,
@@ -1095,7 +1286,6 @@ class _SettingsCard
 
                 Text(
                   value,
-
                   style:
                       const TextStyle(
                     fontSize: 13,
