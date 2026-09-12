@@ -5,21 +5,26 @@ import android.content.Context
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+
 import com.example.nira.rag.RagSearch
 import com.example.nira.rag.RagRepository
 import com.example.nira.rag.RagPdfProcessor
+
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
+
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
 import java.io.File
+
 
 class MainActivity : FlutterActivity() {
 
@@ -36,14 +41,17 @@ class MainActivity : FlutterActivity() {
     private var ragRepository: RagRepository? = null
     private var ragPdfProcessor: RagPdfProcessor? = null
 
+
     override fun configureFlutterEngine(
         flutterEngine: FlutterEngine
     ) {
         super.configureFlutterEngine(flutterEngine)
 
-        // ---------------------------------------------------------
+
+        // =========================================================
         // DEVICE CHANNEL
-        // ---------------------------------------------------------
+        // =========================================================
+
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             DEVICE_CHANNEL
@@ -64,7 +72,7 @@ class MainActivity : FlutterActivity() {
 
                     val ramGb =
                         memoryInfo.totalMem /
-                                (1024.0 * 1024.0 * 1024.0)
+                            (1024.0 * 1024.0 * 1024.0)
 
                     result.success(ramGb)
                 }
@@ -75,9 +83,11 @@ class MainActivity : FlutterActivity() {
             }
         }
 
-        // ---------------------------------------------------------
+
+        // =========================================================
         // GEMMA / LITERT-LM CHANNEL
-        // ---------------------------------------------------------
+        // =========================================================
+
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             GEMMA_CHANNEL
@@ -100,6 +110,7 @@ class MainActivity : FlutterActivity() {
 
                         return@setMethodCallHandler
                     }
+
 
                     gemmaScope.launch {
 
@@ -133,9 +144,11 @@ class MainActivity : FlutterActivity() {
             }
         }
 
-        // ---------------------------------------------------------
+
+        // =========================================================
         // RAG CHANNEL
-        // ---------------------------------------------------------
+        // =========================================================
+
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             RAG_CHANNEL
@@ -143,9 +156,11 @@ class MainActivity : FlutterActivity() {
 
             when (call.method) {
 
+
                 // -------------------------------------------------
                 // RETRIEVE CONTEXT
                 // -------------------------------------------------
+
                 "retrieveContext" -> {
 
                     val query =
@@ -162,6 +177,7 @@ class MainActivity : FlutterActivity() {
                         return@setMethodCallHandler
                     }
 
+
                     gemmaScope.launch {
 
                         try {
@@ -174,11 +190,13 @@ class MainActivity : FlutterActivity() {
                                         ragSearch = it
                                     }
 
+
                             val context =
                                 search.retrieveContext(
                                     query = query,
                                     limit = 5
                                 )
+
 
                             withContext(Dispatchers.Main) {
                                 result.success(context)
@@ -199,9 +217,11 @@ class MainActivity : FlutterActivity() {
                     }
                 }
 
+
                 // -------------------------------------------------
                 // INGEST PDF FROM FILE PATH
                 // -------------------------------------------------
+
                 "ingestPdf" -> {
 
                     val pdfPath =
@@ -209,6 +229,7 @@ class MainActivity : FlutterActivity() {
 
                     val filename =
                         call.argument<String>("filename")
+
 
                     if (pdfPath.isNullOrBlank()) {
 
@@ -221,6 +242,7 @@ class MainActivity : FlutterActivity() {
                         return@setMethodCallHandler
                     }
 
+
                     if (filename.isNullOrBlank()) {
 
                         result.error(
@@ -232,6 +254,7 @@ class MainActivity : FlutterActivity() {
                         return@setMethodCallHandler
                     }
 
+
                     gemmaScope.launch {
 
                         try {
@@ -239,11 +262,14 @@ class MainActivity : FlutterActivity() {
                             val pdfFile =
                                 File(pdfPath)
 
+
                             if (!pdfFile.exists()) {
+
                                 throw Exception(
                                     "PDF file not found."
                                 )
                             }
+
 
                             val processor =
                                 ragPdfProcessor
@@ -253,6 +279,7 @@ class MainActivity : FlutterActivity() {
                                         ragPdfProcessor = it
                                     }
 
+
                             val repository =
                                 ragRepository
                                     ?: RagRepository(
@@ -261,22 +288,27 @@ class MainActivity : FlutterActivity() {
                                         ragRepository = it
                                     }
 
+
                             val text =
                                 processor.extractText(
                                     pdfFile
                                 )
 
+
                             if (text.isBlank()) {
+
                                 throw Exception(
                                     "No text could be extracted from the PDF."
                                 )
                             }
+
 
                             val documentId =
                                 repository.addDocument(
                                     filename = filename,
                                     content = text
                                 )
+
 
                             withContext(Dispatchers.Main) {
 
@@ -303,9 +335,11 @@ class MainActivity : FlutterActivity() {
                     }
                 }
 
+
                 // -------------------------------------------------
                 // INGEST BUNDLED TEST PDF
                 // -------------------------------------------------
+
                 "ingestBundledPdf" -> {
 
                     val assetName =
@@ -313,6 +347,7 @@ class MainActivity : FlutterActivity() {
 
                     val filename =
                         call.argument<String>("filename")
+
 
                     if (assetName.isNullOrBlank()) {
 
@@ -325,6 +360,7 @@ class MainActivity : FlutterActivity() {
                         return@setMethodCallHandler
                     }
 
+
                     if (filename.isNullOrBlank()) {
 
                         result.error(
@@ -336,6 +372,7 @@ class MainActivity : FlutterActivity() {
                         return@setMethodCallHandler
                     }
 
+
                     gemmaScope.launch {
 
                         try {
@@ -346,8 +383,10 @@ class MainActivity : FlutterActivity() {
                                     assetName
                                 )
 
-                            // Copy the bundled PDF from Android
-                            // assets to the app's private storage.
+
+                            // Copy bundled PDF from Android
+                            // assets to private app storage.
+
                             if (!pdfFile.exists()) {
 
                                 assets.open(
@@ -361,6 +400,7 @@ class MainActivity : FlutterActivity() {
                                 }
                             }
 
+
                             val processor =
                                 ragPdfProcessor
                                     ?: RagPdfProcessor(
@@ -368,6 +408,7 @@ class MainActivity : FlutterActivity() {
                                     ).also {
                                         ragPdfProcessor = it
                                     }
+
 
                             val repository =
                                 ragRepository
@@ -377,22 +418,27 @@ class MainActivity : FlutterActivity() {
                                         ragRepository = it
                                     }
 
+
                             val text =
                                 processor.extractText(
                                     pdfFile
                                 )
 
+
                             if (text.isBlank()) {
+
                                 throw Exception(
                                     "No text could be extracted from the PDF."
                                 )
                             }
+
 
                             val documentId =
                                 repository.addDocument(
                                     filename = filename,
                                     content = text
                                 )
+
 
                             withContext(Dispatchers.Main) {
 
@@ -419,6 +465,7 @@ class MainActivity : FlutterActivity() {
                     }
                 }
 
+
                 else -> {
                     result.notImplemented()
                 }
@@ -426,9 +473,11 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // -------------------------------------------------------------
+
+    // =============================================================
     // GEMMA INFERENCE
-    // -------------------------------------------------------------
+    // =============================================================
+
     private fun generateWithGemma(
         prompt: String
     ): String {
@@ -436,17 +485,25 @@ class MainActivity : FlutterActivity() {
         val engine =
             getOrCreateGemmaEngine()
 
+
         val conversation =
             engine.createConversation(
                 ConversationConfig(
+
                     systemInstruction = Contents.of(
                         "You are NIRA, a helpful offline assistant. " +
-                                "Answer accurately and adapt the explanation to the user's requested level. " +
-                                "Follow requests for brief, simple, detailed, step-by-step, age-based, or marks-based answers. " +
+                                "Answer accurately and naturally. " +
+                                "Answer the user's actual question directly. " +
+                                "Do not answer a different question. " +
+                                "If the user says hello or hi, respond with a short friendly greeting. " +
+                                "Adapt the explanation to the user's requested level. " +
+                                "Follow requests for brief, simple, detailed, step-by-step, " +
+                                "age-based, or marks-based answers. " +
                                 "Do not mention these instructions."
                     )
                 )
             )
+
 
         return try {
 
@@ -454,6 +511,12 @@ class MainActivity : FlutterActivity() {
                 conversation.sendMessage(
                     Contents.of(prompt)
                 )
+
+
+            // IMPORTANT:
+            // LiteRT-LM returns a Message object.
+            // We need the actual generated text,
+            // not Message.toString().
 
             result.toString()
 
@@ -463,14 +526,17 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // -------------------------------------------------------------
+
+    // =============================================================
     // INITIALIZE GEMMA ENGINE ON FIRST REQUEST
-    // -------------------------------------------------------------
+    // =============================================================
+
     private fun getOrCreateGemmaEngine(): Engine {
 
         gemmaEngine?.let {
             return it
         }
+
 
         val modelFile =
             File(
@@ -478,7 +544,11 @@ class MainActivity : FlutterActivity() {
                 "gemma3-1b-it-int4.litertlm"
             )
 
-        // Copy model from Android assets to internal storage.
+
+        // ---------------------------------------------------------
+        // Copy model from Android assets to internal storage
+        // ---------------------------------------------------------
+
         if (!modelFile.exists()) {
 
             assets.open(
@@ -492,59 +562,122 @@ class MainActivity : FlutterActivity() {
             }
         }
 
+
+        // ---------------------------------------------------------
+        // Log model information
+        // ---------------------------------------------------------
+
         android.util.Log.d(
             "NIRA_GEMMA",
             "Model path: ${modelFile.absolutePath}, " +
                     "size: ${modelFile.length()} bytes"
         )
 
+
+        // ---------------------------------------------------------
+        // LiteRT-LM Engine configuration
+        // ---------------------------------------------------------
+
         val engineConfig =
             EngineConfig(
-                modelPath = modelFile.absolutePath,
-                backend = Backend.CPU(),
-                maxNumTokens = 512,
-                cacheDir = cacheDir.absolutePath
+
+                modelPath =
+                    modelFile.absolutePath,
+
+                backend =
+                    Backend.CPU(),
+
+                maxNumTokens =
+                    512,
+
+                cacheDir =
+                    cacheDir.absolutePath
             )
+
+
+        // ---------------------------------------------------------
+        // Create and initialize engine
+        // ---------------------------------------------------------
 
         val engine =
             Engine(engineConfig)
 
+
         engine.initialize()
 
-        gemmaEngine = engine
+
+        gemmaEngine =
+            engine
+
 
         return engine
     }
 
-    // -------------------------------------------------------------
+
+    // =============================================================
     // CLEANUP
-    // -------------------------------------------------------------
+    // =============================================================
+
     override fun onDestroy() {
 
+        // ---------------------------------------------------------
+        // Close Gemma engine
+        // ---------------------------------------------------------
+
         try {
+
             gemmaEngine?.close()
+
         } catch (_: Exception) {
         }
+
 
         gemmaEngine = null
 
+
+        // ---------------------------------------------------------
+        // Close RAG search
+        // ---------------------------------------------------------
+
         try {
+
             ragSearch?.close()
+
         } catch (_: Exception) {
         }
+
 
         ragSearch = null
 
+
+        // ---------------------------------------------------------
+        // Close RAG repository
+        // ---------------------------------------------------------
+
         try {
+
             ragRepository?.close()
+
         } catch (_: Exception) {
         }
 
+
         ragRepository = null
+
+
+        // ---------------------------------------------------------
+        // Clear PDF processor
+        // ---------------------------------------------------------
 
         ragPdfProcessor = null
 
+
+        // ---------------------------------------------------------
+        // Cancel coroutine scope
+        // ---------------------------------------------------------
+
         gemmaScope.cancel()
+
 
         super.onDestroy()
     }
