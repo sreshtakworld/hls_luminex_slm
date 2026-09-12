@@ -498,13 +498,12 @@ class MainActivity : FlutterActivity() {
                     "size: ${modelFile.length()} bytes"
         )
 
-    val engineConfig =
-    EngineConfig(
-        modelPath = modelFile.absolutePath,
-        backend = Backend.CPU(),
-        maxNumTokens = 2048,
-        cacheDir = cacheDir.absolutePath
-    )
+        val engineConfig =
+            EngineConfig(
+                modelPath = modelFile.absolutePath,
+                backend = Backend.CPU(),
+                maxNumTokens = 2048,
+                cacheDir = cacheDir.absolutePath
             )
 
         val engine =
