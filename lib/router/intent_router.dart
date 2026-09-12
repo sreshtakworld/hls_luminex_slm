@@ -6,74 +6,107 @@ enum IntentType {
 
 class IntentRouter {
   static IntentType classify(String query) {
-    final text = query.toLowerCase().trim();
+    final text = query.trim();
+    final lower = text.toLowerCase();
 
-    // Calculator-related queries
-    if (_isCalculatorQuery(text)) {
-      return IntentType.calculator;
-    }
+    // ------------------------------------------------------------
+    // DOCUMENT / RAG
+    // ------------------------------------------------------------
 
-    // Document-related queries
-    if (_isDocumentQuery(text)) {
-      return IntentType.document;
-    }
-
-    // Everything else goes to the general AI route
-    return IntentType.general;
-  }
-
-  static bool _isCalculatorQuery(String text) {
-    final calculatorWords = [
-      'calculate',
-      'calculator',
-      'add',
-      'subtract',
-      'multiply',
-      'divide',
-      'plus',
-      'minus',
-      'times',
-      'percentage',
-      'percent',
-      'sum',
-    ];
-
-    // Check for mathematical symbols
-    final hasMathSymbol =
-        text.contains('+') ||
-        text.contains('-') ||
-        text.contains('*') ||
-        text.contains('/') ||
-        text.contains('%');
-
-    // Check for calculator keywords
-    final hasCalculatorWord = calculatorWords.any(
-      (word) => text.contains(word),
-    );
-
-    // Check whether the query contains digits
-    final hasNumber = RegExp(r'\d').hasMatch(text);
-
-    return hasMathSymbol || (hasCalculatorWord && hasNumber);
-  }
-
-  static bool _isDocumentQuery(String text) {
-    final documentWords = [
+    if (_containsAny(lower, [
       'document',
       'pdf',
       'file',
-      'page',
       'chapter',
+      'page',
       'report',
       'notes',
       'according to',
       'in the document',
+      'from the document',
+      'from the pdf',
       'summarize',
       'summary',
-    ];
+    ])) {
+      return IntentType.document;
+    }
 
-    return documentWords.any(
-      (word) => text.contains(word),
+    // ------------------------------------------------------------
+    // MATHEMATICS
+    // ------------------------------------------------------------
+
+    if (_isMathQuestion(lower)) {
+      return IntentType.calculator;
+    }
+
+    // ------------------------------------------------------------
+    // GENERAL AI
+    // ------------------------------------------------------------
+
+    return IntentType.general;
+  }
+
+  static bool _isMathQuestion(
+    String text,
+  ) {
+    // Calculus
+    if (_containsAny(text, [
+      'differentiate',
+      'derivative',
+      'dy/dx',
+      'd/dx',
+      'integrate',
+      'integration',
+      'integral',
+      '∫',
+    ])) {
+      return true;
+    }
+
+    // Algebra / equations
+    if (_containsAny(text, [
+      'solve',
+      'equation',
+      'simplify',
+      'find x',
+    ]) &&
+        text.contains('=')) {
+      return true;
+    }
+
+    // Direct arithmetic expression
+    final expression = text
+        .replaceAll('×', '*')
+        .replaceAll('÷', '/')
+        .replaceAll('−', '-')
+        .replaceAll(',', '')
+        .trim();
+
+    final arithmeticPattern = RegExp(
+      r'^[-+]?\d+(?:\.\d+)?\s*'
+      r'[+\-*/]\s*'
+      r'[-+]?\d+(?:\.\d+)?$',
     );
+
+    if (arithmeticPattern.hasMatch(expression)) {
+      return true;
+    }
+
+    // Mathematical functions / expressions
+    if (RegExp(
+      r'\b(sin|cos|tan|log|ln|sqrt)\b',
+      caseSensitive: false,
+    ).hasMatch(text)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  static bool _containsAny(
+    String text,
+    List<String> phrases,
+  ) {
+    return phrases.any(text.contains);
   }
 }

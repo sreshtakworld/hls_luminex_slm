@@ -177,7 +177,7 @@ class MainActivity : FlutterActivity() {
                             val context =
                                 search.retrieveContext(
                                     query = query,
-                                    limit = 5
+                                    limit = 3
                                 )
 
                             withContext(Dispatchers.Main) {
@@ -500,10 +500,12 @@ class MainActivity : FlutterActivity() {
 
         val engineConfig =
             EngineConfig(
-                modelPath = modelFile.absolutePath,
-                backend = Backend.CPU(),
-                maxNumTokens = 512,
-                cacheDir = cacheDir.absolutePath
+EngineConfig(
+    modelPath = modelFile.absolutePath,
+    backend = Backend.CPU(),
+    maxNumTokens = 2048,
+    cacheDir = cacheDir.absolutePath
+)
             )
 
         val engine =
