@@ -12,21 +12,23 @@ __pycache__/
 # LiteRT-LM source/build
 LiteRT-LM/
 
-# Android/Gradle
-.gradle/
-**/build/
-**/.gradle/
-local.properties
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
 
-# Android Studio / IntelliJ
-.idea/
-*.iml
+# Flutter generated files
+*.log
 
-# Generated files
-captures/
-.externalNativeBuild/
-.cxx/
-
-# OS files
+# IDE / OS miscellaneous
+*.swp
 .DS_Store
-Thumbs.db
+.atom/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
